@@ -115,8 +115,11 @@ cv::Point2f GetSpotCenter(CameraPtr pCam)
 	cv::drawContours(img_display, contours, largest_contour_index, cv::Scalar(0, 0, 255), CV_FILLED, 8, hierarchy);
 	// draw a rectangle on largest object
 	rectangle(img_display, bounding_rect, cv::Scalar(0, 255, 0), 1, 8, 0);
-	
 	cv::imshow("contour", img_display);
+
+	// display threshold image
+	cv::imshow("threshold", thresh);
+
 	cv::waitKey();
 
 	return mc;
