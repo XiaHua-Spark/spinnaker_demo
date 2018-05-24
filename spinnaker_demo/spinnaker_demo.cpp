@@ -66,8 +66,8 @@ cv::Point2f GetSpotCenter(CameraPtr pCam)
 	cv::Mat image(colsize + YPadding, rowsize + XPadding, CV_8UC1, convertedImage->GetData(), convertedImage->GetStride());
 
 	// blur it slightly
-	//cv::Mat blurred;
-	//cv::GaussianBlur(image, blurred, cv::Size(3, 3), 0);
+	cv::Mat blurred;
+	cv::GaussianBlur(image, blurred, cv::Size(3, 3), 0);
 
 	// threshold it
 	cv::Mat thresh;
