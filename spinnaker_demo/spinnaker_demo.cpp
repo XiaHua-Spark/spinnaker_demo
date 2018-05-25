@@ -21,7 +21,8 @@ cv::Mat AcquireSingleImage(CameraPtr pCam)
 
 	// Convert image to mono 8
 	ImagePtr convertedImage = pResultImage->Convert(PixelFormat_Mono8, HQ_LINEAR);
-    // release camera buffer
+    
+	// release camera buffer
 	pResultImage->Release();
 
 	// End acquisition
@@ -31,8 +32,8 @@ cv::Mat AcquireSingleImage(CameraPtr pCam)
 	unsigned int rowsize = convertedImage->GetWidth();
 	unsigned int colsize = convertedImage->GetHeight();
 
-	cout << "Grabbed image " << ", width = " << rowsize << ", height = " << colsize << endl;
-	cout << "Grabbed image " << ", XPadding = " << XPadding << ", YPadding = " << YPadding << endl;
+	cout << "Grabbed image: " << "width = " << rowsize << ", height = " << colsize << endl << endl;
+	//cout << "Grabbed image " << ", XPadding = " << XPadding << ", YPadding = " << YPadding << endl;
 
 	// convert to OpenCV Mat
 	//cv::Mat image(colsize + YPadding, rowsize + XPadding, CV_8UC1);
@@ -160,6 +161,19 @@ int ConfigureExposure(INodeMap & nodeMap, double exposureTimeToSet)
 }
 
 
+// returns the camera to its default state by re - enabling automatic
+int ResetExposure(INodeMap & nodeMap)
+{
+	// Turn automatic exposure back on
+	CEnumerationPtr ptrExposureAuto = nodeMap.GetNode("ExposureAuto");
+	CEnumEntryPtr ptrExposureAutoContinuous = ptrExposureAuto->GetEntryByName("Continuous");
+	ptrExposureAuto->SetIntValue(ptrExposureAutoContinuous->GetValue());
+	cout << "Automatic exposure enabled..." << endl << endl;
+	
+	return 0;
+}
+
+
 // prints the device information of the camera
 int PrintDeviceInfo(INodeMap & nodeMap)
 {
@@ -247,7 +261,10 @@ int main()
 	cv::Mat img= AcquireSingleImage(pCam);
 
 	cv::Point2f currentMassCenter = GetSpotCenter(pCam);
-	cout << currentMassCenter << endl;
+	cout << "Mass Center of the largest object: " << currentMassCenter << endl << endl;
+
+	// Reset exposure
+	ResetExposure(nodeMap);
 
 	// deinitialize camera
 	pCam->DeInit();
