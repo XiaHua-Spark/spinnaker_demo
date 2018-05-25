@@ -16,9 +16,7 @@ using namespace std;
 
 // convert captured image and return it as a opencv Mat 
 cv::Mat AcquireSingleImage(CameraPtr pCam)
-{
-	pCam->BeginAcquisition();
-	
+{	
 	ImagePtr pResultImage = pCam->GetNextImage();
 
 	// Convert image to mono 8
@@ -113,8 +111,14 @@ cv::Point2f GetSpotCenter(CameraPtr pCam)
 
 	// draw the largest contour
 	cv::drawContours(img_display, contours, largest_contour_index, cv::Scalar(0, 0, 255), CV_FILLED, 8, hierarchy);
-	// draw a rectangle on largest object
+	// draw a rectangle over largest object
 	rectangle(img_display, bounding_rect, cv::Scalar(0, 255, 0), 1, 8, 0);
+	// draw the center point
+	cv::circle(img_display, mc, 3, cv::Scalar(255, 0, 0), CV_FILLED);
+	// caption the center point
+	cv::Point2f cap_pos;
+	cap_pos = cv::Point2f(mc.x + 10, mc.y - 10);
+	cv::putText(img_display, "mass center", cap_pos, cv::FONT_HERSHEY_COMPLEX, 0.7, cv::Scalar(255, 0, 0));
 	cv::imshow("contour", img_display);
 
 	// display threshold image
@@ -124,6 +128,9 @@ cv::Point2f GetSpotCenter(CameraPtr pCam)
 
 	return mc;
 }
+
+// adjust ROI of a input camera
+
 
 int main()
 {
@@ -143,14 +150,28 @@ int main()
 	pCam = camList.GetByIndex(0);
 	cout << endl << "Running camera " << 0 << "..." << endl;
 
+	// initialize camera
 	pCam->Init();
+	
+	// Retrieve GenICam nodemap
+	INodeMap & nodeMap = pCam->GetNodeMap();
+	
+	// Retrieve enumeration node from nodemap
+	CEnumerationPtr ptrAcquisitionMode = nodeMap.GetNode("AcquisitionMode");
+	
+	// Retrieve entry node from enumeration node
+	CEnumEntryPtr ptrAcquisitionModeContinuous = ptrAcquisitionMode->GetEntryByName("Continuous");
+
+	// Retrieve integer value from entry node
+	int64_t acquisitionModeContinuous = ptrAcquisitionModeContinuous->GetValue();
+
+	// Set integer value from entry node as new value of enumeration node
+	ptrAcquisitionMode->SetIntValue(acquisitionModeContinuous);
+
+
+	pCam->BeginAcquisition();
 
 	cv::Mat img= AcquireSingleImage(pCam);
-
-	// display captured image
-	//cv::namedWindow("image");
-	//cv::imshow("image", img);
-	//cv::waitKey();
 
 	cv::Point2f currentMassCenter = GetSpotCenter(pCam);
 	cout << currentMassCenter << endl;
