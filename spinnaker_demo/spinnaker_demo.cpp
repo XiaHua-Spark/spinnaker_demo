@@ -129,6 +129,81 @@ cv::Point2f GetSpotCenter(CameraPtr pCam)
 	return mc;
 }
 
+
+// configures a costom exposure time and turn off automatic exposure
+int ConfigureExposure(INodeMap & nodeMap, double exposureTimeToSet)
+{
+	// Turn off automatic exposure mode
+	CEnumerationPtr ptrExposureAuto = nodeMap.GetNode("ExposureAuto");
+	CEnumEntryPtr ptrExposureAutoOff = ptrExposureAuto->GetEntryByName("Off");
+	ptrExposureAuto->SetIntValue(ptrExposureAutoOff->GetValue());
+	cout <<endl << "Automatic exposure disabled..." << endl;
+
+	// Set exposure time manually; exposure time recorded in microseconds
+	CFloatPtr ptrExposureTime = nodeMap.GetNode("ExposureTime");
+
+	// Ensure desired exposure time does not exceed the maximum
+	const double exposureTimeMax = ptrExposureTime->GetMax();
+	
+	//double exposureTimeToSet = 2000000.0;
+
+	if (exposureTimeToSet > exposureTimeMax)
+	{
+		exposureTimeToSet = exposureTimeMax;
+	}
+
+	ptrExposureTime->SetValue(exposureTimeToSet);
+
+	cout << "Exposure time set to " << exposureTimeToSet << " us..." << endl << endl;
+
+	return 0;
+}
+
+
+// prints the device information of the camera
+int PrintDeviceInfo(INodeMap & nodeMap)
+{
+	cout << endl << "*** DEVICE INFORMATION ***" << endl << endl;
+
+	FeatureList_t features;
+	CCategoryPtr category = nodeMap.GetNode("DeviceInformation");
+	
+	category->GetFeatures(features);
+
+	FeatureList_t::const_iterator it;
+	for (it = features.begin(); it != features.end(); ++it)
+	{
+		CNodePtr pfeatureNode = *it;
+		cout << pfeatureNode->GetName() << " : ";
+		CValuePtr pValue = (CValuePtr)pfeatureNode;
+		cout << (IsReadable(pValue) ? pValue->ToString() : "Node not readable");
+		cout << endl;
+	}
+
+	return 0;
+}
+
+// set camera to Continuous Acquisition Mode
+int ContinuousAcquisition(INodeMap & nodeMap)
+{
+	// Retrieve enumeration node from nodemap
+	CEnumerationPtr ptrAcquisitionMode = nodeMap.GetNode("AcquisitionMode");
+
+	// Retrieve entry node from enumeration node
+	CEnumEntryPtr ptrAcquisitionModeContinuous = ptrAcquisitionMode->GetEntryByName("Continuous");
+
+	// Retrieve integer value from entry node
+	int64_t acquisitionModeContinuous = ptrAcquisitionModeContinuous->GetValue();
+
+	// Set integer value from entry node as new value of enumeration node
+	ptrAcquisitionMode->SetIntValue(acquisitionModeContinuous);
+
+	cout << endl << "Acquisition mode set to continuous..." << endl;
+
+	return 0;
+}
+
+
 // adjust ROI of a input camera
 
 
@@ -144,30 +219,28 @@ int main()
 	CameraList camList = system->GetCameras();
 
 	unsigned int numCameras = camList.GetSize();
-	cout << "Number of cameras detected: " << numCameras << endl << endl;
+	cout << "Number of cameras detected: " << numCameras << endl;
 
 	CameraPtr pCam = NULL;
 	pCam = camList.GetByIndex(0);
 	cout << endl << "Running camera " << 0 << "..." << endl;
+
+	// Retrieve TL device nodemap and print device information
+	INodeMap & nodeMapTLDevice = pCam->GetTLDeviceNodeMap();
+	PrintDeviceInfo(nodeMapTLDevice);
 
 	// initialize camera
 	pCam->Init();
 	
 	// Retrieve GenICam nodemap
 	INodeMap & nodeMap = pCam->GetNodeMap();
-	
-	// Retrieve enumeration node from nodemap
-	CEnumerationPtr ptrAcquisitionMode = nodeMap.GetNode("AcquisitionMode");
-	
-	// Retrieve entry node from enumeration node
-	CEnumEntryPtr ptrAcquisitionModeContinuous = ptrAcquisitionMode->GetEntryByName("Continuous");
 
-	// Retrieve integer value from entry node
-	int64_t acquisitionModeContinuous = ptrAcquisitionModeContinuous->GetValue();
+	// set camera to Continuous Acquisition Mode
+	ContinuousAcquisition(nodeMap);
 
-	// Set integer value from entry node as new value of enumeration node
-	ptrAcquisitionMode->SetIntValue(acquisitionModeContinuous);
-
+	// Configure exposure
+	double exposureTimeToSet = 2000.0;
+	ConfigureExposure(nodeMap, exposureTimeToSet);
 
 	pCam->BeginAcquisition();
 
@@ -176,6 +249,7 @@ int main()
 	cv::Point2f currentMassCenter = GetSpotCenter(pCam);
 	cout << currentMassCenter << endl;
 
+	// deinitialize camera
 	pCam->DeInit();
 	pCam = NULL;
 
