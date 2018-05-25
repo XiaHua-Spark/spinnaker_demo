@@ -1,2 +1,2 @@
 # spinnaker_demo
-A CPP ATP program
+A C++ ATP program
