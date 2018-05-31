@@ -219,8 +219,21 @@ int ContinuousAcquisitionMode(INodeMap & nodeMap)
 
 
 // adjust ROI of a input camera
-int SetROI(INodeMap & nodeMap, int64_t width, int64_t height)
+int SetROI(INodeMap & nodeMap, int64_t offsetX, int64_t offsetY, int64_t width, int64_t height)
 {
+	// apply offset X
+	CIntegerPtr ptrOffsetX = nodeMap.GetNode("OffsetX");
+	int64_t OffsetXToSet = offsetX;
+	ptrOffsetX->SetValue(OffsetXToSet);
+	cout << "offset X set to " << ptrOffsetX->GetValue() << "..." << endl;
+
+	// apply offset Y
+	CIntegerPtr ptrOffsetY = nodeMap.GetNode("OffsetY");
+	int64_t OffsetYToSet = offsetY;
+	ptrOffsetY->SetValue(OffsetYToSet);
+	cout << "offset X set to " << ptrOffsetY->GetValue() << "..." << endl;
+
+
 	// set width
 	CIntegerPtr ptrWidth = nodeMap.GetNode("Width");
 	int64_t widthToSet = width;
@@ -291,9 +304,12 @@ int main()
 	ContinuousAcquisitionMode(nodeMap);
 
 	// set ROI
-	int64_t w = 320;
-	int64_t h = 320;
-	SetROI(nodeMap, w, h);
+	int64_t OffsetX = 100;
+	int64_t OffsetY = 0;
+	int64_t ImgWidth = 600;
+	int64_t ImgHeight = 540;
+	
+	SetROI(nodeMap, OffsetX, OffsetY, ImgWidth, ImgHeight);
 	//ReSetROI(nodeMap);
 
 	// Configure exposure
