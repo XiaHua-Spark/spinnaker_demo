@@ -198,7 +198,7 @@ int PrintDeviceInfo(INodeMap & nodeMap)
 }
 
 // set camera to Continuous Acquisition Mode
-int ContinuousAcquisition(INodeMap & nodeMap)
+int ContinuousAcquisitionMode(INodeMap & nodeMap)
 {
 	// Retrieve enumeration node from nodemap
 	CEnumerationPtr ptrAcquisitionMode = nodeMap.GetNode("AcquisitionMode");
@@ -219,6 +219,42 @@ int ContinuousAcquisition(INodeMap & nodeMap)
 
 
 // adjust ROI of a input camera
+int SetROI(INodeMap & nodeMap, int64_t width, int64_t height)
+{
+	// set width
+	CIntegerPtr ptrWidth = nodeMap.GetNode("Width");
+	int64_t widthToSet = width;
+	ptrWidth->SetValue(widthToSet);
+	cout << "Width set to " << ptrWidth->GetValue() << "..." << endl;
+
+
+	// set height
+	CIntegerPtr ptrHeight = nodeMap.GetNode("Height");
+	int64_t heightToSet = height;
+	ptrHeight->SetValue(heightToSet);
+	cout << "Height set to " << ptrHeight->GetValue() << "..." << endl << endl;
+
+	return 0;
+}
+
+
+int ReSetROI(INodeMap & nodeMap)
+{
+	// set width
+	CIntegerPtr ptrWidth = nodeMap.GetNode("Width");
+	int64_t widthToSet = ptrWidth->GetMax();
+	ptrWidth->SetValue(widthToSet);
+	cout << "Width set to " << ptrWidth->GetValue() << "..." << endl;
+
+	// set height
+	CIntegerPtr ptrHeight = nodeMap.GetNode("Height");
+	int64_t heightToSet = ptrHeight->GetMax();
+	ptrHeight->SetValue(heightToSet);
+	cout << "Height set to " << ptrHeight->GetValue() << "..." << endl << endl;
+
+	return 0;
+}
+
 
 
 int main()
@@ -234,8 +270,10 @@ int main()
 
 	unsigned int numCameras = camList.GetSize();
 	cout << "Number of cameras detected: " << numCameras << endl;
-
+	
+	// Create shared pointer
 	CameraPtr pCam = NULL;
+	
 	pCam = camList.GetByIndex(0);
 	cout << endl << "Running camera " << 0 << "..." << endl;
 
@@ -250,7 +288,13 @@ int main()
 	INodeMap & nodeMap = pCam->GetNodeMap();
 
 	// set camera to Continuous Acquisition Mode
-	ContinuousAcquisition(nodeMap);
+	ContinuousAcquisitionMode(nodeMap);
+
+	// set ROI
+	int64_t w = 320;
+	int64_t h = 320;
+	SetROI(nodeMap, w, h);
+	//ReSetROI(nodeMap);
 
 	// Configure exposure
 	double exposureTimeToSet = 2000.0;
