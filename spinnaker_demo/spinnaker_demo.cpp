@@ -132,6 +132,7 @@ cv::Point2f GetSpotCenter(CameraPtr pCam)
 
 
 // configures a costom exposure time and turn off automatic exposure
+// exposure time recorded in microseconds
 int ConfigureExposure(INodeMap & nodeMap, double exposureTimeToSet)
 {
 	// Turn off automatic exposure mode
@@ -251,6 +252,7 @@ int SetROI(INodeMap & nodeMap, int64_t offsetX, int64_t offsetY, int64_t width, 
 }
 
 
+// reset ROI of a input camera
 int ReSetROI(INodeMap & nodeMap)
 {
 	// set width
@@ -267,6 +269,8 @@ int ReSetROI(INodeMap & nodeMap)
 
 	return 0;
 }
+
+
 
 
 
