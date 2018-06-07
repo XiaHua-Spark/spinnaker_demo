@@ -17,6 +17,7 @@
 
 #include "NIDAQmx.h"
 
+
 using namespace Spinnaker;
 using namespace Spinnaker::GenApi;
 using namespace Spinnaker::GenICam;
@@ -55,7 +56,7 @@ cv::Mat AcquireSingleImage(CameraPtr pCam)
 // return the coordinate of the largest contour caputured from a input camera
 cv::Point2f GetSpotCenter(CameraPtr pCam)
 {
-	pCam->BeginAcquisition();
+	// pCam->BeginAcquisition();
 
 	ImagePtr pResultImage = pCam->GetNextImage();
 
@@ -325,6 +326,8 @@ int setvoltage(TaskHandle taskhandle, float64 voltage)
 	return 0;
 }
 
+//=============================================================================
+
 int main()
 {
 	// Print application build information
@@ -371,7 +374,7 @@ int main()
 	double exposureTimeToSet = 2000.0;
 	ConfigureExposure(nodeMap, exposureTimeToSet);
 
-	// pCam->BeginAcquisition();
+	pCam->BeginAcquisition();
 	// cv::Mat img= AcquireSingleImage(pCam);
 
 	//=============================================================================
