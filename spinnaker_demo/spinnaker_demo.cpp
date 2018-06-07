@@ -1,12 +1,21 @@
 #include "stdafx.h"
 #include "Spinnaker.h"
 #include "SpinGenApi/SpinnakerGenApi.h"
+
 #include <iostream>
 #include <sstream>
+#include <fstream>
+#include <Windows.h>
+
+#include <string.h>
+#include <tchar.h>
+#include <math.h>
 
 #include <opencv2/core/core.hpp>  
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp> 
+
+#include "NIDAQmx.h"
 
 using namespace Spinnaker;
 using namespace Spinnaker::GenApi;
@@ -271,8 +280,50 @@ int ReSetROI(INodeMap & nodeMap)
 }
 
 
+vector<cv::Point2d> calibrate_controller(TaskHandle taskhandle, CameraPtr pCam, cv::Point2f initMassCenter, int calib_start, int calib_stop, int calib_step, double factor)
+{
+	vector<cv::Point2d> calib_table(0);
+	// calibration loop for pizo_serialno
+	for (int j = calib_start; j <= calib_stop; j += calib_step) // calibrate with calib_iter 
+	{
+
+		// change voltage
+		float64 data = j * factor;
+		DAQmxWriteAnalogScalarF64(taskhandle, 0, 0, data, NULL);
 
 
+		Sleep(sleeptime);
+
+		cv::Point2f tempMassCenter = GetSpotCenter(pCam);
+
+		cout << "temp position: " << tempMassCenter << endl;
+
+		// save current drift to drift table
+		calib_table.push_back(tempMassCenter - initMassCenter);
+
+	}
+	return calib_table;
+
+}
+
+
+int setvoltage(TaskHandle taskhandle, float64 voltage)
+{
+
+	if (voltage >= 10)
+	{
+		voltage = 10;
+		cout << "voltage too high" << endl;
+	}
+
+	if (voltage <= 0)
+	{
+		voltage = 0;
+		cout << "voltage too low" << endl;
+	}
+	DAQmxWriteAnalogScalarF64(taskhandle, 0, 0, voltage, NULL);
+	return 0;
+}
 
 int main()
 {
@@ -320,12 +371,225 @@ int main()
 	double exposureTimeToSet = 2000.0;
 	ConfigureExposure(nodeMap, exposureTimeToSet);
 
-	pCam->BeginAcquisition();
+	// pCam->BeginAcquisition();
+	// cv::Mat img= AcquireSingleImage(pCam);
 
-	cv::Mat img= AcquireSingleImage(pCam);
+	//=============================================================================
 
-	cv::Point2f currentMassCenter = GetSpotCenter(pCam);
-	cout << "Mass Center of the largest object: " << currentMassCenter << endl << endl;
+	// initialize the adc
+	TaskHandle	taskHandle_ao0 = 0;
+	TaskHandle	taskHandle_ao1 = 0;
+
+	DAQmxCreateTask("", &taskHandle_ao0);
+	DAQmxCreateTask("", &taskHandle_ao1);
+
+	DAQmxCreateAOVoltageChan(taskHandle_ao0, "Dev1/ao0", "", 0.0, 10.0, DAQmx_Val_Volts, "");
+	DAQmxCreateAOVoltageChan(taskHandle_ao1, "Dev1/ao1", "", 0.0, 10.0, DAQmx_Val_Volts, "");
+
+	DAQmxStartTask(taskHandle_ao0);
+	DAQmxStartTask(taskHandle_ao1);
+
+	//=============================================================================
+	
+	cv::Point2f initMassCenter;
+	cv::Point2f currentMassCenter;
+	cv::Point2f correctedMassCenter;
+
+	std::vector<double> position_error_x(0);
+	std::vector<double> position_error_y(0);
+	std::vector<double> position_error_distance(0);
+
+	// get init position for the spot
+	initMassCenter = GetSpotCenter(pCam);
+	cout << "initial Mass Center of the largest object: " << initMassCenter << endl;
+
+	//=============================================================================
+
+	// for voltage calibration
+	int calib_start = 1;
+	int calib_step = 1;
+	int calib_stop = 100;
+
+	// initialize the drift val table
+	vector<cv::Point2d> drift_table_0(0), drift_table_1(0);
+	drift_table_0 = calibrate_controller(taskHandle_ao0, camera, initMassCenter, calib_start, calib_stop, calib_step, 0.1);
+	cout << "calibrate next controller: " << endl;
+	drift_table_0 = calibrate_controller(taskHandle_ao1, camera, initMassCenter, calib_start, calib_stop, calib_step, 0.1);
+
+	DAQmxStopTask(taskHandle_ao0);
+	DAQmxStopTask(taskHandle_ao1);
+
+	// save calibration data to file
+	std::vector<double> offset_x(0);
+	std::vector<double> offset_y(0);
+	ofstream outputFile;
+	outputFile.open("outputFile_controller0.txt", std::ios::out);
+	for (size_t ii = 0; ii < drift_table_0.size(); ++ii)
+	{
+		outputFile << drift_table_0[ii].x << "," << drift_table_0[ii].y << std::endl;
+		offset_x.push_back(drift_table_0[ii].x);
+		offset_y.push_back(drift_table_0[ii].y);
+	}
+	outputFile.close();
+
+	//=============================================================================
+
+	// find the correspondence between the port and offset 
+	cv::Mat x_mean_mat, y_mean_mat, x_std_mat, y_std_mat;
+	double x_std, y_std, x_mean, y_mean;
+	cv::meanStdDev(offset_x, x_mean_mat, x_std_mat);
+	cv::meanStdDev(offset_y, y_mean_mat, y_std_mat);
+	x_std = x_std_mat.at<double>(0, 0);
+	y_std = y_std_mat.at<double>(0, 0);
+	//x_mean = x_mean_mat.at<double>(0, 0);
+	//y_mean = y_mean_mat.at<double>(0, 0);
+	x_mean = offset_x[offset_x.size() - 1] - offset_x[5];
+	y_mean = offset_y[offset_y.size() - 1] - offset_y[5];
+
+	short sign_x = 1, sign_y = 1;
+
+	// if the controller[0] controls y axis
+	if (x_std < y_std)
+	{
+		DAQmxCreateAOVoltageChan(taskHandle_ao0, "Dev1/ao1", "", 0.0, 10.0, DAQmx_Val_Volts, "");
+		DAQmxCreateAOVoltageChan(taskHandle_ao1, "Dev1/ao0", "", 0.0, 10.0, DAQmx_Val_Volts, "");
+
+		if (y_mean < 0)
+		{
+			sign_y = -1;
+		}
+	}
+	else
+	{
+		if (x_mean < 0)
+		{
+			sign_x = -1;
+		}
+	}
+
+	// save calibration data to file
+	outputFile.open("outputFile_controller1.txt", std::ios::out);
+	offset_x.clear();
+	offset_y.clear();
+	for (size_t ii = 0; ii < drift_table_1.size(); ++ii)
+	{
+		outputFile << drift_table_1[ii].x << "," << drift_table_1[ii].y << std::endl;
+		offset_x.push_back(drift_table_1[ii].x);
+		offset_y.push_back(drift_table_1[ii].y);
+	}
+	outputFile.close();
+	cv::meanStdDev(offset_x, x_mean_mat, x_std_mat);
+	cv::meanStdDev(offset_y, y_mean_mat, y_std_mat);
+	//x_mean = x_mean_mat.at<double>(0, 0);
+	//y_mean = y_mean_mat.at<double>(0, 0);
+	x_mean = offset_x[offset_x.size() - 1] - offset_x[5];
+	y_mean = offset_y[offset_y.size() - 1] - offset_y[5];
+
+	if (x_std < y_std)
+	{
+		if (x_mean < 0)
+		{
+			sign_x = -1;
+		}
+	}
+	else
+	{
+		if (y_mean < 0)
+		{
+			sign_y = -1;
+		}
+	}
+
+	DAQmxStartTask(taskHandle_ao0);
+	DAQmxStartTask(taskHandle_ao1);
+
+	//=============================================================================
+
+	// capture loop
+	char key = 0;
+	
+	float64 error_tolerance = 0.5;
+	float64 kp_0 = 5, kp_1 = 5;    // Proportion
+	float64 ki_0 = 5.0, ki_1 = 5.0; // Integral    
+	float64 kd_0 = 0.0, kd_1 = 0.0; // Derivative
+	
+	while (key != 'q')
+	{
+		cv::Point2f currentMassCenter = GetSpotCenter(pCam);
+		cout << "Mass Center of the largest object: " << currentMassCenter << endl << endl;
+
+
+		float64 v0 = 5.0, v1 = 5.0;
+		float64 x_error_present = currentMassCenter.x - initMassCenter.x;
+		float64 y_error_present = currentMassCenter.y - initMassCenter.y;
+		float64 position_error_present = sqrt(pow(x_error_present, 2) + pow(y_error_present, 2));
+		float64 delta_v0 = 0, delta_v1 = 0;
+
+		float64 x_error_last = 0, y_error_last = 0;
+		float64 x_error_previous = 0, y_error_previous = 0;
+
+		int run_times = 0;
+		while (position_error_present > error_tolerance && run_times < 300)
+		{
+
+
+			delta_v0 = kp_0 * (x_error_present - x_error_last)
+				     + ki_0 * x_error_present
+				     + kd_0 * (x_error_present - 2 * x_error_last + x_error_previous);
+			
+			delta_v1 = kp_1 * (y_error_present - y_error_last)
+				     + ki_1 * y_error_present
+				     + kd_1 * (y_error_present - 2 * y_error_last + y_error_previous);
+			
+			v0 -= sign_x * delta_v0;
+			v1 -= sign_y * delta_v1;
+
+			run_times++;
+
+			// set output voltage
+			setvoltage(taskHandle_ao0, v0);
+			setvoltage(taskHandle_ao1, v1);
+			Sleep(sleeptime);
+
+			// read the previous corrected position
+			correctedMassCenter = GetSpotCenter(camera);
+			//historyMassCenter.push_back(correctedMassCenter);
+
+			// x location of the corrected mass center
+			//xloc = correctedMassCenter.x;		
+			x_error_previous = x_error_last;
+			x_error_last = x_error_present;
+			x_error_present = correctedMassCenter.x - initMassCenter.x;
+			//yloc = correctedMassCenter.y;
+			y_error_previous = y_error_last;
+			y_error_last = y_error_present;
+			y_error_present = correctedMassCenter.y - initMassCenter.y;
+			position_error_present = sqrt(pow(x_error_present, 2) + pow(y_error_present, 2));
+
+			position_error_x.push_back(x_error_present);
+			position_error_y.push_back(y_error_present);
+			position_error_distance.push_back(position_error_present);
+			cout << "iteration counts: " << position_error_distance.size() << endl;
+		}
+
+		//for debug 
+		fstream outputFile;
+		outputFile.open("output_error.txt", std::ios::out);
+		for (short ii = 0; ii < position_error_distance.size(); ii++)
+		{
+			outputFile << position_error_x[ii] << "," << position_error_y[ii] << "," << position_error_distance[ii] << std::endl;
+		}
+		outputFile.close();
+
+		// clear x,y,distance error log
+		position_error_x.clear();
+		position_error_y.clear();
+		position_error_distance.clear();
+
+
+	}
+
+	//=============================================================================
 
 	// Reset exposure
 	ResetExposure(nodeMap);
@@ -339,6 +603,11 @@ int main()
 
 	// Release system
 	system->ReleaseInstance();
+
+	//=============================================================================
+
+	DAQmxStopTask(taskHandle_ao0);
+	DAQmxStopTask(taskHandle_ao1);
 
 
 	return 0;
